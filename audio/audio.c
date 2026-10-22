@@ -2250,6 +2250,21 @@ AudioState *audio_state_by_name(const char *name, Error **errp)
     return NULL;
 }
 
+/* The only audio backend, NULL if there is none or several. */
+AudioState *audio_get_sole_audio_state(bool *several)
+{
+    AudioState *s = QTAILQ_FIRST(&audio_states);
+
+    *several = s && QTAILQ_NEXT(s, list);
+    return s && !*several ? s : NULL;
+}
+
+AudiodevDriver audio_state_driver(AudioState *s)
+{
+    assert(s->dev);
+    return s->dev->driver;
+}
+
 const char *audio_get_id(QEMUSoundCard *card)
 {
     if (card->state) {

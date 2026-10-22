@@ -177,6 +177,8 @@ void audio_help(void);
 
 AudioState *audio_state_by_name(const char *name, Error **errp);
 AudioState *audio_get_default_audio_state(Error **errp);
+AudioState *audio_get_sole_audio_state(bool *several);
+AudiodevDriver audio_state_driver(AudioState *s);
 const char *audio_get_id(QEMUSoundCard *card);
 
 #define DEFINE_AUDIO_PROPERTIES(_s, _f)         \
