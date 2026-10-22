@@ -2041,6 +2041,9 @@ void audio_create_pdos(Audiodev *dev)
 #ifdef CONFIG_AUDIO_SNDIO
         CASE(SNDIO, sndio, );
 #endif
+#ifdef CONFIG_RDP
+        CASE(RDP, rdp, );
+#endif
 #ifdef CONFIG_SPICE
         CASE(SPICE, spice, );
 #endif

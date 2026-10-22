@@ -18,6 +18,10 @@ bool qmp_add_client_spice(int fd, bool has_skipauth, bool skipauth,
 bool qmp_add_client_vnc(int fd, bool has_skipauth, bool skipauth,
                         bool has_tls, bool tls, Error **errp);
 #endif
+#ifdef CONFIG_RDP
+bool qmp_add_client_rdp(int fd, bool has_skipauth, bool skipauth,
+                        bool has_tls, bool tls, Error **errp);
+#endif
 #ifdef CONFIG_DBUS_DISPLAY
 bool qmp_add_client_dbus_display(int fd, bool has_skipauth, bool skipauth,
                         bool has_tls, bool tls, Error **errp);

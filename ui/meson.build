@@ -131,6 +131,15 @@ if sdl.found()
   ui_modules += {'sdl' : sdl_ss}
 endif
 
+if vds.found()
+  system_ss.add(vds, pixman, files(
+    'rdp-clipboard.c',
+    'rdp-core.c',
+    'rdp-display.c',
+    'rdp-input.c',
+  ))
+endif
+
 if spice.found()
   spice_core_ss = ss.source_set()
   spice_core_ss.add(spice, pixman, files(

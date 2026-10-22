@@ -1340,6 +1340,17 @@ if get_option('spice') \
 endif
 spice_headers = spice.partial_dependency(compile_args: true, includes: true)
 
+vds = not_found
+if get_option('rdp') \
+             .disable_auto_if(not have_system) \
+             .require(pixman.found(),
+                      error_message: 'cannot enable RDP if pixman is not available') \
+             .allowed()
+  vds = dependency('vds-1', version: '>=0.1.0',
+                   required: get_option('rdp'),
+                   method: 'pkg-config')
+endif
+
 rt = cc.find_library('rt', required: false)
 
 libiscsi = not_found
@@ -2583,6 +2594,7 @@ config_host_data.set('CONFIG_SPICE_PROTOCOL_MINOR', spice_protocol.version().spl
 config_host_data.set('CONFIG_SPICE_PROTOCOL_MICRO', spice_protocol.version().split('.')[2])
 endif
 config_host_data.set('CONFIG_SPICE', spice.found())
+config_host_data.set('CONFIG_RDP', vds.found())
 config_host_data.set('CONFIG_X11', x11.found())
 config_host_data.set('CONFIG_DBUS_DISPLAY', dbus_display)
 config_host_data.set('CONFIG_CFI', get_option('cfi'))
@@ -4747,6 +4759,7 @@ if vnc.found()
   summary_info += {'VNC SASL support':  sasl}
   summary_info += {'VNC JPEG support':  jpeg}
 endif
+summary_info += {'RDP server (libvds)': vds}
 summary_info += {'spice protocol support': spice_protocol}
 if spice_protocol.found()
   summary_info += {'  spice server support': spice}

@@ -204,6 +204,8 @@ option('rbd', type : 'feature', value : 'auto',
        description: 'Ceph block device driver')
 option('opengl', type : 'feature', value : 'auto',
        description: 'OpenGL support')
+option('rdp', type : 'feature', value : 'auto',
+       description: 'RDP server support (libvds)')
 option('rdma', type : 'feature', value : 'auto',
        description: 'Enable RDMA-based migration')
 option('gtk', type : 'feature', value : 'auto',
