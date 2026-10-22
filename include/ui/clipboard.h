@@ -30,10 +30,12 @@ typedef struct QemuClipboardInfo QemuClipboardInfo;
  * enum QemuClipboardType
  *
  * @QEMU_CLIPBOARD_TYPE_TEXT: text/plain; charset=utf-8
+ * @QEMU_CLIPBOARD_TYPE_PNG: image/png
  * @QEMU_CLIPBOARD_TYPE__COUNT: type count.
  */
 enum QemuClipboardType {
     QEMU_CLIPBOARD_TYPE_TEXT,
+    QEMU_CLIPBOARD_TYPE_PNG,
     QEMU_CLIPBOARD_TYPE__COUNT,
 };
 

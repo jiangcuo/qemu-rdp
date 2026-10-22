@@ -25,7 +25,8 @@
       CONFIG_SPICE_PROTOCOL_MINOR == (minor) &&           \
       CONFIG_SPICE_PROTOCOL_MICRO >= (micro)))
 
-#define VDAGENT_BUFFER_LIMIT (1 * MiB)
+/* Room for a clipboard image (PNG screenshots are often several MiB). */
+#define VDAGENT_BUFFER_LIMIT (32 * MiB)
 #define VDAGENT_MOUSE_DEFAULT true
 #define VDAGENT_CLIPBOARD_DEFAULT false
 
@@ -324,6 +325,8 @@ static uint32_t type_qemu_to_vdagent(enum QemuClipboardType type)
     switch (type) {
     case QEMU_CLIPBOARD_TYPE_TEXT:
         return VD_AGENT_CLIPBOARD_UTF8_TEXT;
+    case QEMU_CLIPBOARD_TYPE_PNG:
+        return VD_AGENT_CLIPBOARD_IMAGE_PNG;
     default:
         return VD_AGENT_CLIPBOARD_NONE;
     }
@@ -554,6 +557,9 @@ static void vdagent_clipboard_recv_grab(VDAgentChardev *vd, uint8_t s, uint32_t 
         case VD_AGENT_CLIPBOARD_UTF8_TEXT:
             info->types[QEMU_CLIPBOARD_TYPE_TEXT].available = true;
             break;
+        case VD_AGENT_CLIPBOARD_IMAGE_PNG:
+            info->types[QEMU_CLIPBOARD_TYPE_PNG].available = true;
+            break;
         default:
             break;
         }
@@ -574,6 +580,9 @@ static void vdagent_clipboard_recv_request(VDAgentChardev *vd, uint8_t s, uint32
     switch (*(uint32_t *)data) {
     case VD_AGENT_CLIPBOARD_UTF8_TEXT:
         type = QEMU_CLIPBOARD_TYPE_TEXT;
+        break;
+    case VD_AGENT_CLIPBOARD_IMAGE_PNG:
+        type = QEMU_CLIPBOARD_TYPE_PNG;
         break;
     default:
         return;
@@ -602,6 +611,9 @@ static void vdagent_clipboard_recv_data(VDAgentChardev *vd, uint8_t s, uint32_t 
     switch (*(uint32_t *)data) {
     case VD_AGENT_CLIPBOARD_UTF8_TEXT:
         type = QEMU_CLIPBOARD_TYPE_TEXT;
+        break;
+    case VD_AGENT_CLIPBOARD_IMAGE_PNG:
+        type = QEMU_CLIPBOARD_TYPE_PNG;
         break;
     default:
         return;

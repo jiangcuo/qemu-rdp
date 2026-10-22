@@ -191,4 +191,4 @@ rdp_input_wheel(int32_t dx, int32_t dy) "dx=%d dy=%d"
 # rdp-clipboard.c
 rdp_clipboard_to_client(size_t bytes) "bytes=%zu"
 rdp_clipboard_from_client(size_t bytes) "bytes=%zu"
-rdp_clipboard_client_grab(int text) "text=%d"
+rdp_clipboard_client_grab(int text, int png) "text=%d png=%d"
