@@ -437,6 +437,21 @@ SRST
     Show the spice server status.
 ERST
 
+#if defined(CONFIG_RDP)
+    {
+        .name       = "rdp",
+        .args_type  = "",
+        .params     = "",
+        .help       = "show the RDP server status",
+        .cmd        = hmp_info_rdp,
+    },
+#endif
+
+SRST
+  ``info rdp``
+    Show the RDP server status.
+ERST
+
     {
         .name       = "name",
         .args_type  = "",

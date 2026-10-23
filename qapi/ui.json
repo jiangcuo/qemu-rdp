@@ -19,7 +19,7 @@
 # Since: 7.0
 ##
 { 'enum': 'DisplayProtocol',
-  'data': [ 'vnc', 'spice' ] }
+  'data': [ 'vnc', 'spice', { 'name': 'rdp', 'if': 'CONFIG_RDP' } ] }
 
 ##
 # @SetPasswordAction:
@@ -46,6 +46,7 @@
 # @protocol:
 #     - 'vnc' to modify the VNC server password
 #     - 'spice' to modify the Spice server password
+#     - 'rdp' to modify the RDP server credentials
 #
 # @password: the new password
 #
@@ -60,7 +61,30 @@
             'password': 'str',
             '*connected': 'SetPasswordAction' },
   'discriminator': 'protocol',
-  'data': { 'vnc': 'SetPasswordOptionsVnc' } }
+  'data': { 'vnc': 'SetPasswordOptionsVnc',
+            'rdp': { 'type': 'SetPasswordOptionsRdp',
+                     'if': 'CONFIG_RDP' } } }
+
+##
+# @SetPasswordOptionsRdp:
+#
+# Options for set_password specific to the RDP protocol.
+#
+# @username: user name clients must present.  Defaults to the
+#     @username option of -rdp.
+#
+# @domain: domain clients must present.  Defaults to none.
+#
+# @one-time: invalidate the password after the first successful
+#     login.  Defaults to false.
+#
+# Since: 10.0
+##
+{ 'struct': 'SetPasswordOptionsRdp',
+  'data': { '*username': 'str',
+            '*domain': 'str',
+            '*one-time': 'bool' },
+  'if': 'CONFIG_RDP' }
 
 ##
 # @SetPasswordOptionsVnc:
@@ -101,6 +125,7 @@
 # @protocol:
 #     - 'vnc' to modify the VNC server expiration
 #     - 'spice' to modify the Spice server expiration
+#     - 'rdp' to modify the RDP server expiration
 #
 # @time: when to expire the password.
 #
@@ -154,6 +179,193 @@
 #     <- { "return": {} }
 ##
 { 'command': 'expire_password', 'boxed': true, 'data': 'ExpirePasswordOptions' }
+
+##
+# @RdpClientInfo:
+#
+# Information about a connected RDP client.
+#
+# @sid: session id, unique within this QEMU instance
+#
+# @peer: remote address ("host:port"), empty if unknown
+#
+# @user: authenticated user name, if any
+#
+# @codec: graphics codec in use ("avc420" or "legacy"), once
+#     negotiated
+#
+# @connected-at: connection time in seconds since the Unix epoch
+#
+# @fps: measured frames per second over the last second
+#
+# @bitrate-kbps: measured video bitrate in kbit/s over the last
+#     second
+#
+# @rtt-ms: round-trip time in milliseconds, if measured
+#
+# Since: 10.0
+##
+{ 'struct': 'RdpClientInfo',
+  'data': { 'sid': 'int',
+            'peer': 'str',
+            '*user': 'str',
+            '*codec': 'str',
+            'connected-at': 'int',
+            'fps': 'int',
+            'bitrate-kbps': 'int',
+            '*rtt-ms': 'int' },
+  'if': 'CONFIG_RDP' }
+
+##
+# @RdpInfo:
+#
+# Information about the RDP server.
+#
+# @enabled: true if the RDP server is enabled
+#
+# @host: listening address, if listening
+#
+# @port: listening port, if listening
+#
+# @auth: authentication method ("none", "tls" or "nla")
+#
+# @clients: connected clients
+#
+# @debug-dir: directory collecting the per-session diagnostic files,
+#     if debugging is enabled
+#
+# @debug-input: whether client keyboard and mouse events are
+#     recorded in input.csv (keys are redacted)
+#
+# @debug-video: whether the encoded video stream is recorded in
+#     video-headN.h264
+#
+# Since: 10.0
+##
+{ 'struct': 'RdpInfo',
+  'data': { 'enabled': 'bool',
+            '*host': 'str',
+            '*port': 'int',
+            '*auth': 'str',
+            'clients': ['RdpClientInfo'],
+            '*debug-dir': 'str',
+            '*debug-input': 'bool',
+            '*debug-video': 'bool' },
+  'if': 'CONFIG_RDP' }
+
+##
+# @query-rdp:
+#
+# Returns information about the RDP server.
+#
+# Since: 10.0
+#
+# .. qmp-example::
+#
+#     -> { "execute": "query-rdp" }
+#     <- { "return": { "enabled": true, "host": "127.0.0.1",
+#            "port": 3389, "auth": "nla",
+#            "clients": [ { "sid": 1, "peer": "127.0.0.1:52000",
+#                           "user": "vdi", "codec": "avc420",
+#                           "connected-at": 1760000000,
+#                           "fps": 30, "bitrate-kbps": 2400,
+#                           "rtt-ms": 3 } ] } }
+##
+{ 'command': 'query-rdp', 'returns': 'RdpInfo',
+  'if': 'CONFIG_RDP' }
+
+##
+# @RdpEventClient:
+#
+# RDP client in an event.
+#
+# @sid: session id
+#
+# @peer: remote address ("host:port"), empty if unknown
+#
+# @user: authenticated user name, if any
+#
+# Since: 10.0
+##
+{ 'struct': 'RdpEventClient',
+  'data': { 'sid': 'int', 'peer': 'str', '*user': 'str' },
+  'if': 'CONFIG_RDP' }
+
+##
+# @RDP_CONNECTED:
+#
+# Emitted when an RDP client opens a connection, before
+# authentication.
+#
+# @client: the client
+#
+# Since: 10.0
+##
+{ 'event': 'RDP_CONNECTED',
+  'data': { 'client': 'RdpEventClient' },
+  'if': 'CONFIG_RDP' }
+
+##
+# @RDP_INITIALIZED:
+#
+# Emitted when an RDP client is authenticated and its session is set
+# up.
+#
+# @client: the client
+#
+# Since: 10.0
+##
+{ 'event': 'RDP_INITIALIZED',
+  'data': { 'client': 'RdpEventClient' },
+  'if': 'CONFIG_RDP' }
+
+##
+# @RDP_DISCONNECTED:
+#
+# Emitted when an RDP connection is closed.
+#
+# @client: the client
+#
+# @reason: why the connection ended
+#
+# Since: 10.0
+##
+{ 'event': 'RDP_DISCONNECTED',
+  'data': { 'client': 'RdpEventClient', 'reason': 'str' },
+  'if': 'CONFIG_RDP' }
+
+##
+# @rdp-set-debug:
+#
+# Enable or disable the optional RDP debug traces at runtime.  The
+# files written for every connection (session.log, client.json,
+# frames.csv, pointer.csv, audio.csv) follow the debug directory given
+# to -rdp debug-dir; this command only turns the optional ones on and
+# off.
+#
+# @input: record client keyboard and mouse events in input.csv.
+#     Keys that type text are recorded as "char" without their
+#     scancode.
+#
+# @video: record the encoded Annex-B video stream in video-headN.h264.
+#
+# @pdu: record the decrypted client PDUs in client-pdus.bin (reserved,
+#     not implemented yet).
+#
+# Errors:
+#     - If -rdp debug-dir was not given.
+#
+# Since: 10.0
+#
+# .. qmp-example::
+#
+#     -> { "execute": "rdp-set-debug",
+#          "arguments": { "input": true } }
+#     <- { "return": {} }
+##
+{ 'command': 'rdp-set-debug',
+  'data': { '*input': 'bool', '*video': 'bool', '*pdu': 'bool' },
+  'if': 'CONFIG_RDP' }
 
 ##
 # @ImageFormat:

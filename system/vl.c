@@ -117,6 +117,9 @@
 #include "system/confidential-guest-support.h"
 
 #include "ui/qemu-spice.h"
+#ifdef CONFIG_RDP
+#include "ui/qemu-rdp.h"
+#endif
 #include "qapi/string-input-visitor.h"
 #include "qapi/opts-visitor.h"
 #include "qapi/clone-visitor.h"
@@ -2714,6 +2717,9 @@ static void qemu_init_displays(void)
     if (using_spice) {
         qemu_spice.display_init();
     }
+#ifdef CONFIG_RDP
+    qemu_rdp_init(&error_fatal);
+#endif
 }
 
 static void qemu_init_board(void)
@@ -3598,6 +3604,16 @@ void qemu_init(int argc, char **argv)
             case QEMU_OPTION_readconfig:
                 qemu_read_config_file(optarg, qemu_parse_config_group, &error_fatal);
                 break;
+#ifdef CONFIG_RDP
+            case QEMU_OPTION_rdp:
+                opts = qemu_opts_parse_noisily(qemu_find_opts("rdp"), optarg,
+                                               false);
+                if (!opts) {
+                    exit(1);
+                }
+                display_remote++;
+                break;
+#endif
 #ifdef CONFIG_SPICE
             case QEMU_OPTION_spice:
                 opts = qemu_opts_parse_noisily(qemu_find_opts("spice"), optarg, false);

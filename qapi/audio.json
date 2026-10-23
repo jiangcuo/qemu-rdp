@@ -483,6 +483,7 @@
             { 'name': 'pipewire', 'if': 'CONFIG_AUDIO_PIPEWIRE' },
             { 'name': 'sdl', 'if': 'CONFIG_AUDIO_SDL' },
             { 'name': 'sndio', 'if': 'CONFIG_AUDIO_SNDIO' },
+            { 'name': 'rdp', 'if': 'CONFIG_RDP' },
             { 'name': 'spice', 'if': 'CONFIG_SPICE' },
             'wav' ] }
 
@@ -528,6 +529,8 @@
                    'if': 'CONFIG_AUDIO_SDL' },
     'sndio':     { 'type': 'AudiodevSndioOptions',
                    'if': 'CONFIG_AUDIO_SNDIO' },
+    'rdp':       { 'type': 'AudiodevGenericOptions',
+                   'if': 'CONFIG_RDP' },
     'spice':     { 'type': 'AudiodevGenericOptions',
                    'if': 'CONFIG_SPICE' },
     'wav':       'AudiodevWavOptions' } }

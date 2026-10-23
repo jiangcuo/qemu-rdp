@@ -132,6 +132,9 @@ void qmp_add_client(const char *protocol, const char *fdname,
 #ifdef CONFIG_DBUS_DISPLAY
         { "@dbus-display", qmp_add_client_dbus_display },
 #endif
+#ifdef CONFIG_RDP
+        { "rdp", qmp_add_client_rdp },
+#endif
     };
     int fd, i;
 

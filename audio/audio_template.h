@@ -382,6 +382,10 @@ AudiodevPerDirectionOptions *glue(audio_get_pdo_, TYPE)(Audiodev *dev)
     case AUDIODEV_DRIVER_SNDIO:
         return dev->u.sndio.TYPE;
 #endif
+#ifdef CONFIG_RDP
+    case AUDIODEV_DRIVER_RDP:
+        return dev->u.rdp.TYPE;
+#endif
 #ifdef CONFIG_SPICE
     case AUDIODEV_DRIVER_SPICE:
         return dev->u.spice.TYPE;

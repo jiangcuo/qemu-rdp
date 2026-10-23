@@ -10,6 +10,7 @@ audio_ss.add(files(
 
 # deprecated since v10.2, to be removed
 system_ss.add(files('audio-hmp-cmds.c', 'wavcapture.c'))
+system_ss.add(when: vds, if_true: files('rdpaudio.c'))
 
 audio_modules = {}
 foreach m : [

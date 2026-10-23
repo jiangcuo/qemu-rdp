@@ -216,6 +216,9 @@ static void audio_create_pdos(Audiodev *dev)
 #ifdef CONFIG_AUDIO_SNDIO
         CASE(SNDIO, sndio, );
 #endif
+#ifdef CONFIG_RDP
+        CASE(RDP, rdp, );
+#endif
 #ifdef CONFIG_SPICE
         CASE(SPICE, spice, );
 #endif
@@ -312,6 +315,10 @@ static AudiodevPerDirectionOptions *audio_get_pdo_out(Audiodev *dev)
     case AUDIODEV_DRIVER_SNDIO:
         return dev->u.sndio.out;
 #endif
+#ifdef CONFIG_RDP
+    case AUDIODEV_DRIVER_RDP:
+        return dev->u.rdp.out;
+#endif
 #ifdef CONFIG_SPICE
     case AUDIODEV_DRIVER_SPICE:
         return dev->u.spice.out;
@@ -370,6 +377,10 @@ static AudiodevPerDirectionOptions *audio_get_pdo_in(Audiodev *dev)
 #ifdef CONFIG_AUDIO_SNDIO
     case AUDIODEV_DRIVER_SNDIO:
         return dev->u.sndio.in;
+#endif
+#ifdef CONFIG_RDP
+    case AUDIODEV_DRIVER_RDP:
+        return dev->u.rdp.in;
 #endif
 #ifdef CONFIG_SPICE
     case AUDIODEV_DRIVER_SPICE:

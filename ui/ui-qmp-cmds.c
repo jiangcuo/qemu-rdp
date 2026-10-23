@@ -25,12 +25,22 @@
 #include "ui/console.h"
 #include "ui/dbus-display.h"
 #include "ui/qemu-spice.h"
+#ifdef CONFIG_RDP
+#include "ui/qemu-rdp.h"
+#endif
 #ifdef CONFIG_PNG
 #include <png.h>
 #endif
 
 void qmp_set_password(SetPasswordOptions *opts, Error **errp)
 {
+#ifdef CONFIG_RDP
+    if (opts->protocol == DISPLAY_PROTOCOL_RDP) {
+        qemu_rdp_set_password(opts->password, opts->connected, &opts->u.rdp,
+                              errp);
+        return;
+    }
+#endif
     if (opts->protocol == DISPLAY_PROTOCOL_SPICE) {
         if (!qemu_using_spice(errp)) {
             return;
@@ -84,6 +94,12 @@ void qmp_expire_password(ExpirePasswordOptions *opts, Error **errp)
         when += num;
     }
 
+#ifdef CONFIG_RDP
+    if (opts->protocol == DISPLAY_PROTOCOL_RDP) {
+        qemu_rdp_set_password_expiry(when, errp);
+        return;
+    }
+#endif
     if (opts->protocol == DISPLAY_PROTOCOL_SPICE) {
         if (!qemu_using_spice(errp)) {
             return;

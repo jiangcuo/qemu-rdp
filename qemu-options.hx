@@ -2423,6 +2423,136 @@ SRST
     Use C-a h for help on switching between the console and monitor.
 ERST
 
+#ifdef CONFIG_RDP
+DEF("rdp", HAS_ARG, QEMU_OPTION_rdp,
+    "-rdp [addr=addr][,port=port][,tls-creds=<id>][,auth=none|tls|nla]\n"
+    "       [,username=<name>][,password-secret=<secret-id>]\n"
+    "       [,codecs=avc420:remotefx:bitmap][,max-fps=<n>][,bitrate=<kbps>]\n"
+    "       [,encoder=openh264|vaapi][,rendernode=<path>]\n"
+    "       [,encoder-threads=<n>][,qp-max=<n>]\n"
+    "       [,refine-qp=<n>][,refine-delay=<ms>]\n"
+    "       [,audio=on|off][,clipboard=on|off][,resize-on-connect=on|off]\n"
+    "       [,sas-hotkey=ctrl-alt-end|off]\n"
+    "       [,debug-dir=<path>][,debug-input=on|off][,debug-video=on|off]\n"
+    "       [,log=<filter>][,log-format=text|json]\n"
+    "                enable the RDP server (libvds)\n",
+    QEMU_ARCH_ALL)
+#endif
+SRST
+``-rdp option[,option[,...]]``
+    Enable the RDP server. Clients negotiate the graphics codec: EGFX
+    AVC420 (openh264, or VA-API with encoder=vaapi) when supported, otherwise RemoteFX or plain bitmaps.
+    GL displays (virgl, vfio display) need ``-display egl-headless`` so
+    that frames are read back for RDP. Valid options are
+
+    ``addr=<addr>``
+        IP address to listen on. Default is ``127.0.0.1``.
+
+    ``port=<nr>``
+        TCP port to listen on. Without it, no socket is opened and
+        clients can only be added with the QMP ``add_client`` command.
+
+    ``tls-creds=<id>``
+        ID of a ``tls-creds-x509`` object (``endpoint=server``) providing
+        ``server-cert.pem`` and ``server-key.pem``. Without it, a
+        self-signed certificate is generated at start.
+
+    ``auth=none|tls|nla``
+        Authentication method. ``nla`` (default) uses TLS and CredSSP;
+        ``tls`` checks the password sent in the Client Info PDU;
+        ``none`` accepts every client.
+
+    ``username=<name>``
+        User name clients must present. Default is empty.
+
+    ``password-secret=<secret-id>``
+        ID of a ``secret`` object holding the initial password. The
+        password can be changed at runtime with ``set_password`` and
+        ``expire_password`` (protocol ``rdp``).
+
+    ``codecs=<list>``
+        Allowed codecs, separated by ``:``, among ``avc420``,
+        ``remotefx`` and ``bitmap``. Default is all. The order of
+        preference is fixed.
+
+    ``max-fps=<n>``
+        Frame rate cap per display (1 to 120). Default is 60.
+
+    ``bitrate=<kbps>``
+        Maximum video bitrate. Default is automatic.
+
+    ``encoder-threads=<n>``
+        openh264 threads per display. Default is 2.
+
+    ``encoder=openh264|vaapi``
+        H.264 encoder. ``openh264`` encodes on the CPU. ``vaapi`` encodes
+        on the GPU, colour conversion included, and needs libvds built with
+        its ``vaapi`` feature; when it is unavailable libvds falls back to
+        openh264. Default is ``openh264``.
+
+    ``rendernode=<path>``
+        DRM render node used by ``encoder=vaapi``, for example
+        ``/dev/dri/renderD128``. Default lets FFmpeg pick one.
+
+    ``qp-max=<n>``
+        Highest quantizer the encoder may use (1 to 51). The picture is never
+        blurred past this point: when the bitrate cannot pay for a frame,
+        the frame is simply larger than the budget, and the automatic
+        bitrate adaptation answers a client that cannot keep up instead.
+        51 is H.264's own limit, i.e. no ceiling. Default is 30.
+
+    ``refine-qp=<n>``
+        Quantizer of a refinement frame, which re-sends a static area
+        that was encoded too coarsely (1 to 51, at most ``qp-max``).
+        Default is 10.
+
+    ``refine-delay=<ms>``
+        Delay after which static areas are re-encoded at high quality;
+        0 disables it. Default is 200.
+
+    ``audio=on|off``; \ ``clipboard=on|off``
+        Enable audio playback (``-audiodev rdp``) and clipboard sharing
+        (``qemu-vdagent`` chardev). Default is on.
+
+    ``resize-on-connect=on|off``
+        Ask the guest to adopt the client resolution when a client
+        connects. Default is on.
+
+    ``sas-hotkey=ctrl-alt-end|off``
+        What the client's Ctrl+Alt+End turns into for the guest. Clients
+        cannot send Ctrl+Alt+Del itself (their own operating system eats
+        it), so they send Ctrl+Alt+End and expect the server to inject the
+        secure attention sequence; ``ctrl-alt-end`` (the default) does
+        that, matching mstsc. ``off`` injects the keys the client sent.
+        Only left Ctrl and left Alt count: right Alt (AltGr) types text.
+
+    ``debug-dir=<path>``
+        Collect per-session diagnostic files. Every connection gets
+        ``<path>/<vm-name>-<pid>/session-<sid>-<time>/`` containing a
+        ``session.log`` (that session's debug-level log, independent of
+        ``log``), ``client.json`` (what the client announced), and
+        ``frames.csv``, ``pointer.csv`` and ``audio.csv`` traces. Use
+        ``debug-dir=on`` for ``%TEMP%\\vds`` (Windows) or ``/tmp/vds``.
+        Disabled by default. The flags can also be changed at runtime
+        with the QMP command ``rdp-set-debug``.
+
+    ``debug-input=on|off``
+        Additionally record client keyboard and mouse events in
+        ``input.csv``. Modifiers and non-character keys (Ctrl, Alt,
+        Delete, F1-F12, arrows, ...) are recorded with their scancode;
+        keys that type text are recorded as ``char`` without a scancode,
+        so the file never contains what was typed. Default is off.
+
+    ``debug-video=on|off``
+        Additionally record the encoded video stream in
+        ``video-head<N>.h264`` (Annex-B, playable with ``ffplay``). Files
+        rotate at 200 MB. Default is off.
+
+    ``log=<filter>``; \ ``log-format=text|json``
+        libvds log filter (e.g. ``info,vds_rdp=debug``) and format.
+        Logs are written to stderr.
+ERST
+
 #ifdef CONFIG_SPICE
 DEF("spice", HAS_ARG, QEMU_OPTION_spice,
     "-spice [port=port][,tls-port=secured-port][,x509-dir=<dir>]\n"
