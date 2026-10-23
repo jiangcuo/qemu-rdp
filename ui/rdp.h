@@ -32,6 +32,10 @@ void rdp_input_pointer_rel(int32_t dx, int32_t dy);
 void rdp_input_button(uint32_t button, bool down);
 void rdp_input_wheel(int32_t dx, int32_t dy);
 
+/* rdp-audio.c */
+void rdp_audio_capture_init(VdsServer *server, const char *audiodev,
+                            Error **errp);
+
 /* rdp-clipboard.c */
 void rdp_clipboard_init(VdsServer *server);
 void rdp_clipboard_client_grab(const uint32_t *types, uint32_t count);

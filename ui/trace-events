@@ -228,6 +228,9 @@ rdp_display_layout_unsupported(uint32_t head) "head=%u"
 rdp_input_lock_sync(int scroll, int num, int caps, int leds) "scroll=%d num=%d caps=%d leds=0x%x"
 rdp_input_wheel(int32_t dx, int32_t dy) "dx=%d dy=%d"
 
+# rdp-audio.c
+rdp_audio_capture(const char *audiodev, const char *driver) "audiodev=%s driver=%s"
+
 # rdp-clipboard.c
 rdp_clipboard_to_client(size_t bytes) "bytes=%zu"
 rdp_clipboard_from_client(size_t bytes) "bytes=%zu"

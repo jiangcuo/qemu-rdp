@@ -2431,7 +2431,8 @@ DEF("rdp", HAS_ARG, QEMU_OPTION_rdp,
     "       [,encoder=openh264|vaapi][,rendernode=<path>]\n"
     "       [,encoder-threads=<n>][,qp-max=<n>]\n"
     "       [,refine-qp=<n>][,refine-delay=<ms>]\n"
-    "       [,audio=on|off][,clipboard=on|off][,resize-on-connect=on|off]\n"
+    "       [,audio=on|off][,audiodev=<id>][,clipboard=on|off]\n"
+    "       [,resize-on-connect=on|off]\n"
     "       [,sas-hotkey=ctrl-alt-end|off]\n"
     "       [,debug-dir=<path>][,debug-input=on|off][,debug-video=on|off]\n"
     "       [,log=<filter>][,log-format=text|json]\n"
@@ -2511,8 +2512,15 @@ SRST
         0 disables it. Default is 200.
 
     ``audio=on|off``; \ ``clipboard=on|off``
-        Enable audio playback (``-audiodev rdp``) and clipboard sharing
-        (``qemu-vdagent`` chardev). Default is on.
+        Enable audio playback and clipboard sharing (``qemu-vdagent``
+        chardev). Default is on.
+
+    ``audiodev=<id>``
+        Audio backend whose playback is sent to the RDP client.  Any
+        driver works (``none``, ``pa``, ``spice``...): its mixed output is
+        captured.  Without this option the only ``-audiodev`` of the VM is
+        used; with several, set it explicitly.  A sound card on
+        ``-audiodev rdp`` is sent directly and needs no capture.
 
     ``resize-on-connect=on|off``
         Ask the guest to adopt the client resolution when a client

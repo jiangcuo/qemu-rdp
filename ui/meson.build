@@ -175,6 +175,7 @@ endif
 
 if vds.found()
   system_ss.add(vds, pixman, files(
+    'rdp-audio.c',
     'rdp-clipboard.c',
     'rdp-core.c',
     'rdp-display.c',

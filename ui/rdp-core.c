@@ -68,6 +68,7 @@ static QemuOptsList qemu_rdp_opts = {
         { .name = "refine-delay", .type = QEMU_OPT_NUMBER },
         { .name = "egfx-mixed", .type = QEMU_OPT_BOOL },
         { .name = "audio", .type = QEMU_OPT_BOOL },
+        { .name = "audiodev", .type = QEMU_OPT_STRING },
         { .name = "clipboard", .type = QEMU_OPT_BOOL },
         { .name = "resize-on-connect", .type = QEMU_OPT_BOOL },
         { .name = "sas-hotkey", .type = QEMU_OPT_STRING },
@@ -496,6 +497,13 @@ void qemu_rdp_init(Error **errp)
     }
     if (cfg.clipboard) {
         rdp_clipboard_init(rdp.server);
+    }
+    if (cfg.audio) {
+        rdp_audio_capture_init(rdp.server, qemu_opt_get(opts, "audiodev"),
+                               errp);
+        if (*errp) {
+            return;
+        }
     }
 
     rdp.exit_notifier.notify = rdp_exit_notify;
