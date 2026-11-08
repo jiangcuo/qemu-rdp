@@ -2426,6 +2426,7 @@ ERST
 #ifdef CONFIG_RDP
 DEF("rdp", HAS_ARG, QEMU_OPTION_rdp,
     "-rdp [addr=addr][,port=port][,tls-creds=<id>][,auth=none|tls|nla]\n"
+    "       [,x509-cert-file=<file>,x509-key-file=<file>]\n"
     "       [,username=<name>][,password-secret=<secret-id>]\n"
     "       [,codecs=avc420:remotefx:bitmap][,max-fps=<n>][,bitrate=<kbps>]\n"
     "       [,encoder=openh264|vaapi][,rendernode=<path>][,gl=on|off]\n"
@@ -2458,8 +2459,12 @@ SRST
 
     ``tls-creds=<id>``
         ID of a ``tls-creds-x509`` object (``endpoint=server``) providing
-        ``server-cert.pem`` and ``server-key.pem``. Without it, a
-        self-signed certificate is generated at start.
+        ``server-cert.pem`` and ``server-key.pem``. Without it or
+        ``x509-cert-file``, a self-signed certificate is generated at start.
+
+    ``x509-cert-file=<file>``; \ ``x509-key-file=<file>``
+        PEM files of the server certificate (chain) and its private key,
+        instead of ``tls-creds``. Both are needed.
 
     ``auth=none|tls|nla``
         Authentication method. ``nla`` (default) uses TLS and CredSSP;
