@@ -227,6 +227,11 @@
 #
 # @auth: authentication method ("none", "tls" or "nla")
 #
+# @fingerprint: SHA-256 fingerprint of the server TLS certificate, as
+#     uppercase hex bytes separated by colons.  Without @tls-creds a
+#     self-signed certificate is generated on first use and kept until
+#     QEMU exits.
+#
 # @clients: connected clients
 #
 # @debug-dir: directory collecting the per-session diagnostic files, if
@@ -245,6 +250,7 @@
             '*host': 'str',
             '*port': 'int',
             '*auth': 'str',
+            '*fingerprint': 'str',
             'clients': ['RdpClientInfo'],
             '*debug-dir': 'str',
             '*debug-input': 'bool',
@@ -263,6 +269,7 @@
 #     -> { "execute": "query-rdp" }
 #     <- { "return": { "enabled": true, "host": "127.0.0.1",
 #                      "port": 3389, "auth": "nla",
+#                      "fingerprint": "3A:5F:...:C2",
 #                      "clients": [ { "sid": 1,
 #                                     "peer": "127.0.0.1:52000",
 #                                     "user": "vdi", "codec": "avc420",

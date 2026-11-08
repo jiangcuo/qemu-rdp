@@ -54,6 +54,8 @@ static QemuOptsList qemu_rdp_opts = {
         { .name = "addr", .type = QEMU_OPT_STRING },
         { .name = "port", .type = QEMU_OPT_NUMBER },
         { .name = "tls-creds", .type = QEMU_OPT_STRING },
+        { .name = "x509-cert-file", .type = QEMU_OPT_STRING },
+        { .name = "x509-key-file", .type = QEMU_OPT_STRING },
         { .name = "auth", .type = QEMU_OPT_STRING },
         { .name = "username", .type = QEMU_OPT_STRING },
         { .name = "password-secret", .type = QEMU_OPT_STRING },
@@ -329,6 +331,27 @@ static uint32_t rdp_debug_flags(QemuOpts *opts)
     return flags;
 }
 
+static bool rdp_load_tls_files(const char *cert_path, const char *key_path,
+                               Error **errp)
+{
+    g_autofree char *cert = NULL;
+    g_autofree char *key = NULL;
+    g_autoptr(GError) gerr = NULL;
+    char *vds_err = NULL;
+
+    if (!g_file_get_contents(cert_path, &cert, NULL, &gerr) ||
+        !g_file_get_contents(key_path, &key, NULL, &gerr)) {
+        error_setg(errp, "rdp: cannot read TLS credentials: %s",
+                   gerr->message);
+        return false;
+    }
+    if (vds_server_set_tls(rdp.server, cert, key, &vds_err) != VDS_OK) {
+        rdp_error_take(errp, vds_err, "invalid TLS credentials");
+        return false;
+    }
+    return true;
+}
+
 static bool rdp_load_tls_creds(const char *id, Error **errp)
 {
     Object *obj;
@@ -336,10 +359,6 @@ static bool rdp_load_tls_creds(const char *id, Error **errp)
     g_autofree char *dir = NULL;
     g_autofree char *cert_path = NULL;
     g_autofree char *key_path = NULL;
-    g_autofree char *cert = NULL;
-    g_autofree char *key = NULL;
-    g_autoptr(GError) gerr = NULL;
-    char *vds_err = NULL;
 
     obj = object_resolve_path_component(object_get_objects_root(), id);
     if (!obj || !object_dynamic_cast(obj, TYPE_QCRYPTO_TLS_CREDS_X509)) {
@@ -358,17 +377,7 @@ static bool rdp_load_tls_creds(const char *id, Error **errp)
     }
     cert_path = g_build_filename(dir, QCRYPTO_TLS_CREDS_X509_SERVER_CERT, NULL);
     key_path = g_build_filename(dir, QCRYPTO_TLS_CREDS_X509_SERVER_KEY, NULL);
-    if (!g_file_get_contents(cert_path, &cert, NULL, &gerr) ||
-        !g_file_get_contents(key_path, &key, NULL, &gerr)) {
-        error_setg(errp, "rdp: cannot read TLS credentials: %s",
-                   gerr->message);
-        return false;
-    }
-    if (vds_server_set_tls(rdp.server, cert, key, &vds_err) != VDS_OK) {
-        rdp_error_take(errp, vds_err, "invalid TLS credentials");
-        return false;
-    }
-    return true;
+    return rdp_load_tls_files(cert_path, key_path, errp);
 }
 
 static void rdp_exit_notify(Notifier *n, void *data)
@@ -394,6 +403,8 @@ void qemu_rdp_init(Error **errp)
     VdsConfig cfg;
     VdsLogConfig log_cfg = { .struct_size = sizeof(VdsLogConfig) };
     const char *str;
+    const char *cert_file;
+    const char *key_file;
     char *vds_err = NULL;
     uint32_t version = vds_abi_version();
     uint64_t port;
@@ -468,7 +479,20 @@ void qemu_rdp_init(Error **errp)
     }
 
     str = qemu_opt_get(opts, "tls-creds");
+    cert_file = qemu_opt_get(opts, "x509-cert-file");
+    key_file = qemu_opt_get(opts, "x509-key-file");
+    if (!cert_file != !key_file) {
+        error_setg(errp, "rdp: x509-cert-file and x509-key-file go together");
+        return;
+    }
+    if (str && cert_file) {
+        error_setg(errp, "rdp: tls-creds and x509-cert-file exclude each other");
+        return;
+    }
     if (str && !rdp_load_tls_creds(str, errp)) {
+        return;
+    }
+    if (cert_file && !rdp_load_tls_files(cert_file, key_file, errp)) {
         return;
     }
 
@@ -628,6 +652,24 @@ static RdpClientInfoList *rdp_client_list(void)
     return list;
 }
 
+/* Returns a g_malloc'ed copy of the certificate fingerprint, or NULL. */
+static char *rdp_tls_fingerprint(void)
+{
+    char *vds_err = NULL;
+    char *fp = vds_server_tls_fingerprint(rdp.server, &vds_err);
+    char *ret;
+
+    if (!fp) {
+        warn_report("rdp: cannot get the TLS fingerprint: %s",
+                    vds_err ? vds_err : "unknown error");
+        vds_free_string(vds_err);
+        return NULL;
+    }
+    ret = g_strdup(fp);
+    vds_free_string(fp);
+    return ret;
+}
+
 RdpInfo *qmp_query_rdp(Error **errp)
 {
     RdpInfo *info = g_new0(RdpInfo, 1);
@@ -642,6 +684,7 @@ RdpInfo *qmp_query_rdp(Error **errp)
         info->port = rdp.port;
     }
     info->auth = g_strdup(rdp.auth);
+    info->fingerprint = rdp_tls_fingerprint();
     info->clients = rdp_client_list();
     if (rdp.debug_dir) {
         /* A string member has no has_ companion: NULL means "absent". */
@@ -668,6 +711,9 @@ void hmp_info_rdp(Monitor *mon, const QDict *qdict)
                        info->host, info->port, info->auth);
     } else {
         monitor_printf(mon, "Server: not listening (auth %s)\n", info->auth);
+    }
+    if (info->fingerprint) {
+        monitor_printf(mon, "Fingerprint: %s\n", info->fingerprint);
     }
     if (rdp.debug_dir) {
         monitor_printf(mon, "Debug: %s (input=%s video=%s)\n", rdp.debug_dir,
