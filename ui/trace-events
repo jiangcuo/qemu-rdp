@@ -223,6 +223,12 @@ rdp_display_submit(uint32_t head, uint32_t rects, uint64_t us) "head=%u rects=%u
 rdp_display_cursor_rejected(int w, int h) "w=%d h=%d"
 rdp_display_layout(uint32_t head, uint32_t w, uint32_t h) "head=%u w=%u h=%u"
 rdp_display_layout_unsupported(uint32_t head) "head=%u"
+rdp_display_head_input(uint32_t head, bool cpu, const char *reason) "head=%u cpu=%d reason=%s"
+
+# rdp-gl.c
+rdp_gl_scanout(uint32_t head, uint32_t w, uint32_t h, uint32_t fourcc, uint64_t modifier, bool y0_top, const char *input) "head=%u w=%u h=%u fourcc=0x%x modifier=0x%" PRIx64 " y0_top=%d input=%s"
+rdp_gl_update(uint32_t head, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const char *input) "head=%u x=%u y=%u w=%u h=%u input=%s"
+rdp_gl_readback(uint32_t head, uint32_t rects, uint64_t us) "head=%u rects=%u us=%" PRIu64
 
 # rdp-input.c
 rdp_input_lock_sync(int scroll, int num, int caps, int leds) "scroll=%d num=%d caps=%d leds=0x%x"

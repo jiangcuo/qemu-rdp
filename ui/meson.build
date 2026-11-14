@@ -181,6 +181,11 @@ if vds.found()
     'rdp-display.c',
     'rdp-input.c',
   ))
+  if opengl.found() and gbm.found()
+    rdp_gl_ss = ss.source_set()
+    rdp_gl_ss.add(when: [vds, opengl, gbm, pixman], if_true: files('rdp-gl.c'))
+    ui_modules += {'rdp-gl' : rdp_gl_ss}
+  endif
 endif
 
 if spice.found()

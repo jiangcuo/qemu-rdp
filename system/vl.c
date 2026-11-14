@@ -2071,6 +2071,10 @@ static void qemu_create_early_backends(void)
     /* spice must initialize before audio as it changes the default audiodev */
     /* spice must initialize before chardevs (for spicevmc and spiceport) */
     qemu_spice.init();
+#ifdef CONFIG_RDP
+    /* After spice: whichever display sets up OpenGL first owns it. */
+    qemu_rdp_early_init();
+#endif
 
     qemu_opts_foreach(qemu_find_opts("chardev"),
                       chardev_init_func, NULL, &error_fatal);
@@ -2700,6 +2704,14 @@ static void qemu_maybe_daemonize(const char *pid_file)
 static void qemu_init_displays(void)
 {
     DisplayState *ds;
+#ifdef CONFIG_RDP
+    /*
+     * The display that owns the GL context goes first. One set up before
+     * (egl-headless, spice gl=on) wins over -rdp gl=on, which then runs as
+     * with gl=off (qemu_rdp_early_init).
+     */
+    bool rdp_gl = qemu_rdp_owns_gl();
+#endif
 
     /* init local displays */
     ds = init_displaystate();
@@ -2709,6 +2721,11 @@ static void qemu_init_displays(void)
     os_setup_signal_handling();
 
     /* init remote displays */
+#ifdef CONFIG_RDP
+    if (rdp_gl) {
+        qemu_rdp_init(&error_fatal);
+    }
+#endif
 #ifdef CONFIG_VNC
     qemu_opts_foreach(qemu_find_opts("vnc"),
                       vnc_init_func, NULL, &error_fatal);
@@ -2718,7 +2735,9 @@ static void qemu_init_displays(void)
         qemu_spice.display_init();
     }
 #ifdef CONFIG_RDP
-    qemu_rdp_init(&error_fatal);
+    if (!rdp_gl) {
+        qemu_rdp_init(&error_fatal);
+    }
 #endif
 }
 

@@ -7,10 +7,10 @@
  * A surface in shareable memory (virtio-gpu resources) is attached to libvds,
  * which reads it in place from its encoder thread: the main thread only
  * reports damage. Any other surface is copied by vds_head_submit, which
- * returns once the damaged rectangles are copied (decision D-004: libvds
- * never touches the GPU). GL consoles (virgl, vfio display) are supported
- * through "-display egl-headless", which reads GL frames back into the 2D
- * surface.
+ * returns once the damaged rectangles are copied. GL consoles (virgl, vfio
+ * display) either use "-rdp gl=on" (rdp-gl.c: dmabufs for libvds, or the
+ * frame read back when libvds cannot take them) or "-display egl-headless".
+ * Both read the GL frames back into the 2D surface.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -27,24 +27,8 @@
 #include "rdp.h"
 #include "trace.h"
 
-/* Damage rectangles kept before collapsing to a bounding box. */
-#define RDP_MAX_RECTS 32
 /* Refresh interval while no client consumes frames. */
 #define RDP_IDLE_INTERVAL_MS 100
-
-typedef struct RdpDisplay {
-    DisplayChangeListener dcl;
-    VdsServer *server;
-    VdsHead *head;
-    uint32_t index;
-    DisplaySurface *surface;
-    /* x8r8g8b8 copy, only when the surface uses another format. */
-    pixman_image_t *shadow;
-    /* libvds reads the surface in place (vds_head_attach_shared). */
-    bool shared;
-    VdsRect rects[RDP_MAX_RECTS];
-    uint32_t nrects;
-} RdpDisplay;
 
 static GPtrArray *rdp_displays;
 
@@ -141,20 +125,24 @@ static bool rdp_format_native(pixman_format_code_t format)
     return format == PIXMAN_x8r8g8b8 || format == PIXMAN_a8r8g8b8;
 }
 
-static void rdp_gfx_update(DisplayChangeListener *dcl,
-                           int x, int y, int w, int h)
+void rdp_display_gfx_update(DisplayChangeListener *dcl,
+                            int x, int y, int w, int h)
 {
     RdpDisplay *rd = container_of(dcl, RdpDisplay, dcl);
 
     rdp_damage_add(rd, x, y, w, h);
 }
 
-static void rdp_gfx_switch(DisplayChangeListener *dcl,
-                           DisplaySurface *new_surface)
+void rdp_display_gfx_switch(DisplayChangeListener *dcl,
+                            DisplaySurface *new_surface)
 {
     RdpDisplay *rd = container_of(dcl, RdpDisplay, dcl);
+    const RdpGlOps *gl = rdp_gl_ops();
     int w, h;
 
+    if (rd->gl && gl && gl->scanout_active(rd)) {
+        gl->scanout_end(rd);
+    }
     rd->surface = new_surface;
     qemu_pixman_image_unref(rd->shadow);
     rd->shadow = NULL;
@@ -188,9 +176,10 @@ static void rdp_gfx_switch(DisplayChangeListener *dcl,
     rdp_damage_full(rd);
 }
 
-static void rdp_refresh(DisplayChangeListener *dcl)
+void rdp_display_refresh(DisplayChangeListener *dcl)
 {
     RdpDisplay *rd = container_of(dcl, RdpDisplay, dcl);
+    const RdpGlOps *gl = rdp_gl_ops();
     bool wanted = vds_server_wants_frame(rd->server);
     bool active = qemu_rdp_has_client();
     uint64_t interval = active ? 1000 / MAX(qemu_rdp_max_fps(), 1)
@@ -202,6 +191,11 @@ static void rdp_refresh(DisplayChangeListener *dcl)
     trace_rdp_display_refresh(rd->index, active, wanted, interval);
     qemu_console_listener_set_refresh(dcl, interval);
     qemu_console_hw_update(dcl->con);
+    if (rd->gl && gl && gl->scanout_active(rd)) {
+        /* rdp-gl.c hands libvds the GL scanout itself. */
+        rd->nrects = 0;
+        return;
+    }
     if (!wanted || !rd->surface || !rd->nrects) {
         return;
     }
@@ -236,21 +230,21 @@ static void rdp_refresh(DisplayChangeListener *dcl)
     rd->nrects = 0;
 }
 
-static bool rdp_check_format(DisplayChangeListener *dcl,
-                             pixman_format_code_t format)
+bool rdp_display_check_format(DisplayChangeListener *dcl,
+                              pixman_format_code_t format)
 {
     /* Other formats work through the shadow image, but cost a copy. */
     return rdp_format_native(format);
 }
 
-static void rdp_mouse_set(DisplayChangeListener *dcl, int x, int y, bool on)
+void rdp_display_mouse_set(DisplayChangeListener *dcl, int x, int y, bool on)
 {
     RdpDisplay *rd = container_of(dcl, RdpDisplay, dcl);
 
     vds_cursor_set_visible(rd->server, on);
 }
 
-static void rdp_cursor_define(DisplayChangeListener *dcl, QEMUCursor *c)
+void rdp_display_cursor_define(DisplayChangeListener *dcl, QEMUCursor *c)
 {
     RdpDisplay *rd = container_of(dcl, RdpDisplay, dcl);
 
@@ -263,12 +257,12 @@ static void rdp_cursor_define(DisplayChangeListener *dcl, QEMUCursor *c)
 
 static const DisplayChangeListenerOps rdp_dcl_ops = {
     .dpy_name = "rdp",
-    .dpy_refresh = rdp_refresh,
-    .dpy_gfx_update = rdp_gfx_update,
-    .dpy_gfx_switch = rdp_gfx_switch,
-    .dpy_gfx_check_format = rdp_check_format,
-    .dpy_mouse_set = rdp_mouse_set,
-    .dpy_cursor_define = rdp_cursor_define,
+    .dpy_refresh = rdp_display_refresh,
+    .dpy_gfx_update = rdp_display_gfx_update,
+    .dpy_gfx_switch = rdp_display_gfx_switch,
+    .dpy_gfx_check_format = rdp_display_check_format,
+    .dpy_mouse_set = rdp_display_mouse_set,
+    .dpy_cursor_define = rdp_display_cursor_define,
 };
 
 void rdp_display_init(VdsServer *server, Error **errp)
@@ -300,7 +294,10 @@ void rdp_display_init(VdsServer *server, Error **errp)
             return;
         }
         g_ptr_array_add(rdp_displays, rd);
-        qemu_console_register_listener(con, &rd->dcl, &rdp_dcl_ops);
+        qemu_console_register_listener(con, &rd->dcl,
+                                       rdp_gl_ops() ?
+                                       rdp_gl_ops()->display_init(rd, con) :
+                                       &rdp_dcl_ops);
     }
     if (!rdp_displays->len) {
         warn_report("rdp: the machine has no graphic console");
@@ -318,6 +315,9 @@ void rdp_display_fini(void)
         RdpDisplay *rd = g_ptr_array_index(rdp_displays, i);
 
         qemu_console_unregister_listener(&rd->dcl);
+        if (rd->gl && rdp_gl_ops()) {
+            rdp_gl_ops()->display_fini(rd);
+        }
         vds_head_remove(rd->head);
         qemu_pixman_image_unref(rd->shadow);
         g_free(rd);
@@ -326,7 +326,7 @@ void rdp_display_fini(void)
     rdp_displays = NULL;
 }
 
-QemuConsole *rdp_display_console(uint32_t head)
+RdpDisplay *rdp_display_lookup(uint32_t head)
 {
     uint32_t i;
 
@@ -334,10 +334,49 @@ QemuConsole *rdp_display_console(uint32_t head)
         RdpDisplay *rd = g_ptr_array_index(rdp_displays, i);
 
         if (rd->index == head) {
-            return rd->dcl.con;
+            return rd;
         }
     }
     return NULL;
+}
+
+QemuConsole *rdp_display_console(uint32_t head)
+{
+    RdpDisplay *rd = rdp_display_lookup(head);
+
+    return rd ? rd->dcl.con : NULL;
+}
+
+void rdp_display_head_input(uint32_t head, bool cpu, const char *reason)
+{
+    RdpDisplay *rd = rdp_display_lookup(head);
+
+    trace_rdp_display_head_input(head, cpu, reason);
+    if (rd && rd->gl && rdp_gl_ops()) {
+        rdp_gl_ops()->head_input(rd, cpu, reason);
+    }
+}
+
+RdpDisplayInfoList *rdp_display_info(void)
+{
+    RdpDisplayInfoList *list = NULL, **tail = &list;
+    uint32_t i;
+
+    for (i = 0; rdp_displays && i < rdp_displays->len; i++) {
+        RdpDisplay *rd = g_ptr_array_index(rdp_displays, i);
+        RdpDisplayInfo *info = g_new0(RdpDisplayInfo, 1);
+        const char *reason = NULL;
+
+        info->head = rd->index;
+        if (rd->gl && rdp_gl_ops() && rdp_gl_ops()->scanout_active(rd)) {
+            info->input = g_strdup(rdp_gl_ops()->input(rd, &reason));
+            info->reason = g_strdup(reason);
+        } else {
+            info->input = g_strdup(rd->shared ? "shared" : "copy");
+        }
+        QAPI_LIST_APPEND(tail, info);
+    }
+    return list;
 }
 
 void rdp_display_layout(const VdsMonitor *monitors, uint32_t count)
