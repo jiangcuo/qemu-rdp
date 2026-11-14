@@ -11,6 +11,8 @@
 要点：
 - 遵守 QEMU 自身风格（`docs/devel/style.rst`），改动必须通过 `scripts/checkpatch.pl`。
 - 新功能写在新文件（`ui/rdp-*.c`、`audio/rdpaudio.c`、`chardev/char-rdp.c`），已有文件只加挂钩。
+- `ui/rdp-gl.c`（`-rdp gl=on`）是模块 `ui-rdp-gl`：`--enable-modules` 时 EGL 辅助函数在 `ui-opengl` 模块里。
+  `system/vl.c` 的挂钩是 `qemu_rdp_early_init()`（在 spice 之后、设备创建之前）。两种构建方式都要能编译。
 - 不使用 D-Bus 显示（`-display dbus`）作为 RDP 的实现途径。
 - 不修改与 RDP 无关的 QEMU 代码。
 - 只有人类明确要求时才提交；提交规则见 `../vds/AGENTS.md` 第 7 节。

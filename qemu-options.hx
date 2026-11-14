@@ -2269,7 +2269,9 @@ DEF("rdp", HAS_ARG, QEMU_OPTION_rdp,
     "       [,x509-cert-file=<file>,x509-key-file=<file>]\n"
     "       [,username=<name>][,password-secret=<secret-id>]\n"
     "       [,codecs=avc420:remotefx:bitmap][,max-fps=<n>][,bitrate=<kbps>]\n"
-    "       [,encoder=openh264|vaapi][,rendernode=<path>]\n"
+    "       [,encoder=openh264|vaapi][,rendernode=<path>][,gl=on|off]\n"
+    "       [,encoder-node=<path>]\n"
+    "       [,share=force-shared|exclusive][,connections=<n>]\n"
     "       [,encoder-threads=<n>][,qp-max=<n>]\n"
     "       [,refine-qp=<n>][,refine-delay=<ms>]\n"
     "       [,audio=on|off][,audiodev=<id>][,clipboard=on|off]\n"
@@ -2284,8 +2286,9 @@ SRST
 ``-rdp option[,option[,...]]``
     Enable the RDP server. Clients negotiate the graphics codec: EGFX
     AVC420 (openh264, or VA-API with encoder=vaapi) when supported, otherwise RemoteFX or plain bitmaps.
-    GL displays (virgl, vfio display) need ``-display egl-headless`` so
-    that frames are read back for RDP. Valid options are
+    GL displays (virgl, vfio display) need ``gl=on`` or
+    ``-display egl-headless``. Several clients can be connected at once
+    (``share``). Valid options are
 
     ``addr=<addr>``
         IP address to listen on. Default is ``127.0.0.1``.
@@ -2337,8 +2340,37 @@ SRST
         openh264. Default is ``openh264``.
 
     ``rendernode=<path>``
-        DRM render node used by ``encoder=vaapi``, for example
-        ``/dev/dri/renderD128``. Default lets FFmpeg pick one.
+        DRM render node used by ``gl=on`` and ``encoder=vaapi``, for example
+        ``/dev/dri/renderD128``. Default lets EGL (or, without ``gl=on``,
+        FFmpeg) pick one.
+
+    ``encoder-node=<path>``
+        DRM render node used by ``encoder=vaapi`` instead of ``rendernode``,
+        to encode on another GPU than the one rendering. With ``gl=on`` its
+        VA-API may not import the dmabufs of the other GPU: the frames are
+        then read back. Default is ``rendernode``.
+
+    ``gl=on|off``
+        Let RDP own the OpenGL context of GL displays instead of
+        ``-display egl-headless``. As egl-headless, the frames are read back
+        into the display surface, so other displays such as ``-vnc`` show
+        them. With ``encoder=vaapi`` RDP takes the frames as dmabufs instead;
+        when that is not possible (another encoder, a legacy client, a GPU
+        whose VA-API cannot import them) RDP is handed the frames read back.
+        ``query-rdp`` tells which, per display. Without OpenGL support,
+        or when another display already owns the OpenGL context, a
+        warning is printed and RDP runs as with ``gl=off``. Default is off.
+
+    ``share=force-shared|exclusive``
+        ``force-shared`` (the default, as ``-vnc share=force-shared``): every
+        client sees the display and drives the guest at the same time.
+        ``exclusive``: a client that finishes connecting disconnects the
+        others. RDP clients cannot ask for shared or exclusive access, so
+        the choice is the server's.
+
+    ``connections=<n>``
+        Connections at the same time, those still connecting included
+        (1 to 64). Further connections are refused. Default is 32.
 
     ``qp-max=<n>``
         Highest quantizer the encoder may use (1 to 51). The picture is never
@@ -2369,7 +2401,8 @@ SRST
 
     ``resize-on-connect=on|off``
         Ask the guest to adopt the client resolution when a client
-        connects. Default is on.
+        connects, unless other clients are connected (they keep the
+        resolution they see). Default is on.
 
     ``sas-hotkey=ctrl-alt-end|off``
         What the client's Ctrl+Alt+End turns into for the guest. Clients

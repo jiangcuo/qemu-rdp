@@ -13,6 +13,7 @@
 #include "qemu/config-file.h"
 #include "qemu/error-report.h"
 #include "qemu/main-loop.h"
+#include "qemu/module.h"
 #include "qemu/notify.h"
 #include "qemu/option.h"
 #include "qapi/error.h"
@@ -39,10 +40,19 @@ typedef struct RdpState {
     int port;
     const char *auth;
     uint32_t max_fps;
-    uint64_t active_client_sid;
+    /* Sids of clients past connection setup (several: share=force-shared). */
+    GHashTable *initialized;
+    const char *share;
+    uint32_t connections;
     char *debug_dir;
     uint32_t debug_flags;
+    /* GL consoles go through rdp-gl.c (-rdp gl=on and EGL is up). */
+    const RdpGlOps *gl;
+    /* Render node of the GL context, handed to libvds for VA-API. */
+    char *gl_render_node;
 } RdpState;
+
+static const RdpGlOps *rdp_gl_registered;
 
 static RdpState rdp;
 
@@ -65,6 +75,10 @@ static QemuOptsList qemu_rdp_opts = {
         { .name = "encoder-threads", .type = QEMU_OPT_NUMBER },
         { .name = "encoder", .type = QEMU_OPT_STRING },
         { .name = "rendernode", .type = QEMU_OPT_STRING },
+        { .name = "encoder-node", .type = QEMU_OPT_STRING },
+        { .name = "gl", .type = QEMU_OPT_BOOL },
+        { .name = "share", .type = QEMU_OPT_STRING },
+        { .name = "connections", .type = QEMU_OPT_NUMBER },
         { .name = "qp-max", .type = QEMU_OPT_NUMBER },
         { .name = "refine-qp", .type = QEMU_OPT_NUMBER },
         { .name = "refine-delay", .type = QEMU_OPT_NUMBER },
@@ -89,6 +103,60 @@ static void rdp_register_config(void)
 }
 opts_init(rdp_register_config);
 
+void rdp_gl_register(const RdpGlOps *ops)
+{
+    rdp_gl_registered = ops;
+}
+
+const RdpGlOps *rdp_gl_ops(void)
+{
+    return rdp.gl;
+}
+
+bool qemu_rdp_owns_gl(void)
+{
+    return rdp.gl;
+}
+
+void qemu_rdp_early_init(void)
+{
+    QemuOpts *opts = qemu_opts_find(qemu_find_opts("rdp"), NULL);
+    const char *node;
+    Error *err = NULL;
+
+    if (!opts || !qemu_opt_get_bool(opts, "gl", false)) {
+        return;
+    }
+    /*
+     * Every failure leaves -rdp on the 2D path, as without gl=on: GL
+     * consoles then need another display that reads them back, such as
+     * -display egl-headless.
+     */
+    if (display_opengl) {
+        warn_report("rdp: gl=on ignored, another display owns the OpenGL "
+                    "context; GL consoles reach RDP through that display");
+        return;
+    }
+    if (module_load("ui-", "rdp-gl", &err) < 0 || !rdp_gl_registered) {
+        if (err) {
+            warn_report_err(err);
+        }
+        warn_report("rdp: gl=on is not supported by this build or host, "
+                    "using gl=off");
+        return;
+    }
+    node = qemu_opt_get(opts, "rendernode");
+    if (!rdp_gl_registered->init(node, &err)) {
+        error_prepend(&err, "rdp: gl=on disabled: ");
+        warn_report_err(err);
+        return;
+    }
+    rdp.gl = rdp_gl_registered;
+    rdp.gl_render_node = node ? g_strdup(node) : rdp.gl->render_node();
+    info_report("rdp: GL consoles use the EGL context on %s",
+                rdp.gl_render_node ?: "the default render node");
+}
+
 VdsServer *qemu_rdp_server(void)
 {
     return rdp.server;
@@ -101,7 +169,7 @@ uint32_t qemu_rdp_max_fps(void)
 
 bool qemu_rdp_has_client(void)
 {
-    return rdp.active_client_sid != 0;
+    return rdp.initialized && g_hash_table_size(rdp.initialized) != 0;
 }
 
 /* Takes ownership of a libvds error string. */
@@ -207,18 +275,23 @@ static void rdp_cb_client_state(void *opaque, const VdsClientInfo *info,
         qapi_event_send_rdp_connected(&client);
         break;
     case VDS_CLIENT_INITIALIZED:
-        rdp.active_client_sid = info->sid;
+        g_hash_table_add(rdp.initialized,
+                         g_memdup2(&info->sid, sizeof(info->sid)));
         qapi_event_send_rdp_initialized(&client);
         break;
     case VDS_CLIENT_DISCONNECTED:
-        if (rdp.active_client_sid == info->sid) {
-            rdp.active_client_sid = 0;
-        }
+        g_hash_table_remove(rdp.initialized, &info->sid);
         qapi_event_send_rdp_disconnected(&client, reason ? reason : "");
         break;
     default:
         break;
     }
+}
+
+static void rdp_cb_head_input(void *opaque, uint32_t index, bool cpu,
+                              const char *reason)
+{
+    rdp_display_head_input(index, cpu, reason);
 }
 
 static const VdsCallbacks rdp_callbacks = {
@@ -236,6 +309,7 @@ static const VdsCallbacks rdp_callbacks = {
     .clipboard_request = rdp_cb_clipboard_request,
     .clipboard_data = rdp_cb_clipboard_data,
     .client_state = rdp_cb_client_state,
+    .head_input = rdp_cb_head_input,
 };
 
 /* Option parsing */
@@ -306,6 +380,23 @@ static bool rdp_parse_sas(const char *sas, uint32_t *mode, Error **errp)
  * Resolves debug-dir: "on" (and the usual boolean spellings) means the
  * platform's temporary directory, %TEMP%\vds or /tmp/vds.
  */
+/* As for -vnc: the default lets clients share the VM. */
+#define RDP_DEFAULT_CONNECTIONS 32
+#define RDP_MAX_CONNECTIONS 64
+
+static bool rdp_parse_share(const char *share, uint32_t *mode, Error **errp)
+{
+    if (!share || !strcmp(share, "force-shared")) {
+        *mode = VDS_SHARE_FORCE_SHARED;
+    } else if (!strcmp(share, "exclusive")) {
+        *mode = VDS_SHARE_EXCLUSIVE;
+    } else {
+        error_setg(errp, "rdp: share must be 'force-shared' or 'exclusive'");
+        return false;
+    }
+    return true;
+}
+
 static char *rdp_debug_dir(const char *value)
 {
     if (!value) {
@@ -450,7 +541,13 @@ void qemu_rdp_init(Error **errp)
     cfg.bitrate_kbps = qemu_opt_get_number(opts, "bitrate", 0);
     cfg.encoder_threads = qemu_opt_get_number(opts, "encoder-threads", 0);
     cfg.encoder = qemu_opt_get(opts, "encoder");
-    cfg.render_node = qemu_opt_get(opts, "rendernode");
+    /*
+     * By default VA-API uses the GPU that renders the dmabufs of the GL
+     * consoles. Another GPU may not import them: their frames are then read
+     * back.
+     */
+    cfg.render_node = qemu_opt_get(opts, "encoder-node") ?:
+                      qemu_opt_get(opts, "rendernode") ?: rdp.gl_render_node;
     cfg.qp_max = qemu_opt_get_number(opts, "qp-max", cfg.qp_max);
     cfg.refine_qp = qemu_opt_get_number(opts, "refine-qp", cfg.refine_qp);
     cfg.refine_delay_ms = qemu_opt_get_number(opts, "refine-delay",
@@ -464,6 +561,20 @@ void qemu_rdp_init(Error **errp)
                        errp)) {
         return;
     }
+    if (!rdp_parse_share(qemu_opt_get(opts, "share"), &cfg.share, errp)) {
+        return;
+    }
+    rdp.share = cfg.share == VDS_SHARE_EXCLUSIVE ? "exclusive" : "force-shared";
+    rdp.connections = qemu_opt_get_number(opts, "connections",
+                                          RDP_DEFAULT_CONNECTIONS);
+    if (rdp.connections < 1 || rdp.connections > RDP_MAX_CONNECTIONS) {
+        error_setg(errp, "rdp: connections must be between 1 and %u",
+                   RDP_MAX_CONNECTIONS);
+        return;
+    }
+    cfg.max_connections = rdp.connections;
+    rdp.initialized = g_hash_table_new_full(g_int64_hash, g_int64_equal,
+                                            g_free, NULL);
     cfg.vm_name = qemu_name;
     rdp.debug_dir = rdp_debug_dir(qemu_opt_get(opts, "debug-dir"));
     cfg.debug_dir = rdp.debug_dir;
@@ -694,6 +805,10 @@ RdpInfo *qmp_query_rdp(Error **errp)
         info->has_debug_video = true;
         info->debug_video = (rdp.debug_flags & VDS_DEBUG_VIDEO) != 0;
     }
+    info->share = g_strdup(rdp.share);
+    info->has_connections = true;
+    info->connections = rdp.connections;
+    info->displays = rdp_display_info();
     return info;
 }
 
@@ -701,6 +816,7 @@ void hmp_info_rdp(Monitor *mon, const QDict *qdict)
 {
     g_autoptr(RdpInfo) info = qmp_query_rdp(NULL);
     RdpClientInfoList *c;
+    RdpDisplayInfoList *d;
 
     if (!info->enabled) {
         monitor_printf(mon, "Server: disabled\n");
@@ -715,10 +831,17 @@ void hmp_info_rdp(Monitor *mon, const QDict *qdict)
     if (info->fingerprint) {
         monitor_printf(mon, "Fingerprint: %s\n", info->fingerprint);
     }
+    monitor_printf(mon, "Share: %s (up to %" PRId64 " connections)\n",
+                   info->share, info->connections);
     if (rdp.debug_dir) {
         monitor_printf(mon, "Debug: %s (input=%s video=%s)\n", rdp.debug_dir,
                        rdp.debug_flags & VDS_DEBUG_INPUT ? "on" : "off",
                        rdp.debug_flags & VDS_DEBUG_VIDEO ? "on" : "off");
+    }
+    for (d = info->displays; d; d = d->next) {
+        monitor_printf(mon, "Display %" PRId64 ": %s%s%s\n", d->value->head,
+                       d->value->input, d->value->reason ? " - " : "",
+                       d->value->reason ?: "");
     }
     if (!info->clients) {
         monitor_printf(mon, "Clients: none\n");

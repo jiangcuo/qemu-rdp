@@ -215,6 +215,27 @@
   'if': 'CONFIG_RDP' }
 
 ##
+# @RdpDisplayInfo:
+#
+# How a display reaches the RDP server.
+#
+# @head: graphic console index
+#
+# @input: "copy" (the surface is copied), "shared" (the surface is
+#     read in place), "dmabuf" (a GL scanout handed over as a dmabuf),
+#     "readback" (a GL scanout read back into CPU pixels) or "off" (a
+#     GL scanout that could not be read; the client keeps the last
+#     frame)
+#
+# @reason: why a GL scanout is not handed over as a dmabuf
+#
+# Since: 10.0
+##
+{ 'struct': 'RdpDisplayInfo',
+  'data': { 'head': 'int', 'input': 'str', '*reason': 'str' },
+  'if': 'CONFIG_RDP' }
+
+##
 # @RdpInfo:
 #
 # Information about the RDP server.
@@ -243,6 +264,13 @@
 # @debug-video: whether the encoded video stream is recorded in
 #     video-headN.h264
 #
+# @share: "force-shared" (clients share the VM) or "exclusive" (a new
+#     client disconnects the others)
+#
+# @connections: limit of simultaneous connections
+#
+# @displays: how each display reaches libvds
+#
 # Since: 10.0
 ##
 { 'struct': 'RdpInfo',
@@ -254,7 +282,10 @@
             'clients': ['RdpClientInfo'],
             '*debug-dir': 'str',
             '*debug-input': 'bool',
-            '*debug-video': 'bool' },
+            '*debug-video': 'bool',
+            '*share': 'str',
+            '*connections': 'int',
+            'displays': ['RdpDisplayInfo'] },
   'if': 'CONFIG_RDP' }
 
 ##
