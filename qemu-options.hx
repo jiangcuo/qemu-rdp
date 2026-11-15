@@ -2596,7 +2596,8 @@ SRST
 
     ``log=<filter>``; \ ``log-format=text|json``
         libvds log filter (e.g. ``info,vds_rdp=debug``) and format.
-        Logs are written to stderr.
+        Logs are written to stderr. The default filter is ``warn``: nothing
+        is logged while all goes well.
 ERST
 
 #ifdef CONFIG_SPICE

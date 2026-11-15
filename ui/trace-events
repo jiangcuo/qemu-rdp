@@ -215,6 +215,7 @@ egl_init_d3d11_device(void *p) "d3d device: %p"
 rdp_listen(const char *host, int port) "host=%s port=%d"
 rdp_client_state(uint64_t sid, const char *peer, uint32_t state) "sid=%" PRIu64 " peer=%s state=%u"
 rdp_input_unicode_ignored(int down) "down=%d"
+rdp_gl_init(const char *render_node) "render_node=%s"
 
 # rdp-display.c
 rdp_display_refresh(uint32_t head, bool active, bool wanted, uint64_t interval_ms) "head=%u active=%d wanted=%d interval_ms=%" PRIu64
@@ -229,6 +230,8 @@ rdp_display_head_input(uint32_t head, bool cpu, const char *reason) "head=%u cpu
 rdp_gl_scanout(uint32_t head, uint32_t w, uint32_t h, uint32_t fourcc, uint64_t modifier, bool y0_top, const char *input) "head=%u w=%u h=%u fourcc=0x%x modifier=0x%" PRIx64 " y0_top=%d input=%s"
 rdp_gl_update(uint32_t head, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const char *input) "head=%u x=%u y=%u w=%u h=%u input=%s"
 rdp_gl_readback(uint32_t head, uint32_t rects, uint64_t us) "head=%u rects=%u us=%" PRIu64
+rdp_gl_readback_reason(uint32_t head, const char *reason) "head=%u reason=%s"
+rdp_gl_dmabuf(uint32_t head) "head=%u"
 
 # rdp-input.c
 rdp_input_lock_sync(int scroll, int num, int caps, int leds) "scroll=%d num=%d caps=%d leds=0x%x"

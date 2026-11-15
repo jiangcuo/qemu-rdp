@@ -153,8 +153,7 @@ void qemu_rdp_early_init(void)
     }
     rdp.gl = rdp_gl_registered;
     rdp.gl_render_node = node ? g_strdup(node) : rdp.gl->render_node();
-    info_report("rdp: GL consoles use the EGL context on %s",
-                rdp.gl_render_node ?: "the default render node");
+    trace_rdp_gl_init(rdp.gl_render_node ?: "default");
 }
 
 VdsServer *qemu_rdp_server(void)
@@ -512,7 +511,8 @@ void qemu_rdp_init(Error **errp)
         return;
     }
 
-    log_cfg.filter = qemu_opt_get(opts, "log");
+    /* Quiet unless something goes wrong, as other displays are. */
+    log_cfg.filter = qemu_opt_get(opts, "log") ?: "warn";
     str = qemu_opt_get(opts, "log-format");
     if (!str) {
         log_cfg.format = VDS_LOG_FORMAT_DEFAULT;
@@ -620,9 +620,6 @@ void qemu_rdp_init(Error **errp)
             rdp_error_take(errp, vds_err, "cannot set the password");
             return;
         }
-    } else if (cfg.auth != VDS_AUTH_NONE) {
-        warn_report("rdp: no password-secret, clients are refused until "
-                    "set_password is used");
     }
 
     rdp_input_init();
