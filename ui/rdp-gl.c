@@ -113,8 +113,7 @@ static void rdp_gl_set_reason(RdpDisplay *rd, const char *reason)
 
     if (g_strcmp0(gl->reason, reason)) {
         if (reason) {
-            info_report("rdp: display %u: GL frames are read back: %s",
-                        rd->index, reason);
+            trace_rdp_gl_readback_reason(rd->index, reason);
         }
         g_free(gl->reason);
         gl->reason = g_strdup(reason);
@@ -270,8 +269,7 @@ static bool rdp_gl_try_dmabuf(RdpDisplay *rd)
     if (rc == VDS_OK) {
         gl->failures = 0;
         if (gl->reason) {
-            info_report("rdp: display %u: GL frames go to libvds as dmabufs",
-                        rd->index);
+            trace_rdp_gl_dmabuf(rd->index);
         }
         g_free(gl->reason);
         gl->reason = NULL;
